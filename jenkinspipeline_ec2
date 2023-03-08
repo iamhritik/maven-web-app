@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+
+    tools {
+        // Install the Maven version configured as "M3" and add it to the path.
+        maven "Maven-3.8.6"
+    }
+    stages {
+        stage('Git Clone') {
+            steps {
+                // Get some code from a GitHub repository
+                git credentialsId: 'github', url: 'https://github.com/iamhritik/maven-web-app.git'
+            }
+
+            post {
+                // If Maven was able to run the tests, even if some of the test
+                // failed, record the test results and archive the jar file.
+                success {
+                    sh "ls -ltrR"
+                }
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                sh "mvn clean package"
+            }
+        }
+        stage("build & SonarQube analysis") {
+            steps {
+                withSonarQubeEnv('Sonar-server') {
+                sh 'mvn sonar:sonar'
+                }
+            }
+        }
+        stage("Upload Build Artifact") {
+            steps {
+                nexusArtifactUploader artifacts: [[artifactId: '01-maven-web-app', classifier: '', file: 'target/01-maven-web-app.war', type: 'war']], credentialsId: 'nexus_creds', groupId: 'in.ashokit', nexusUrl: '52.66.215.104:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'testing_mavenapp', version: '1.0-SNAPSHOT'
+            }
+        }
+        stage("Deploy Webapp") {
+            steps {
+                sshagent(['ubuntu']) {
+                    sh 'scp -o StrictHostKeyChecking=no target/01-maven-web-app.war  ubuntu@43.204.139.69:/home/ubuntu/'
+                }
+            }
+        }
+
+    }
+}
